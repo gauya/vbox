@@ -1,68 +1,180 @@
-# Makefile - CORRECTED VERSION (AGAIN!)
-# arm-none-eabi-g++ -mcpu=cortex-m4 -mthumb -o main.o -c main.cpp
+# ===============================================================================
+# STM32 RTOS 프로젝트용 Makefile
+# Cortex-M3, M4, H7 MCU 지원 (상단 변수 설정으로 변경 가능)
+# ===============================================================================
 
-# --- Source Files and Target ---
-SRCS_CPP = datetime.cpp
-TARGET = datetime
-OBJS = $(SRCS_CPP:.cpp=.o)
+# --- 1. MCU 및 프로젝트 설정 ---
+# 사용하고자 하는 MCU에 맞게 아래 변수들을 수정하세요.
 
-# --- Compiler and Flags ---
-CXX ?= arm-none-eabi-gcc # Use g++ as the default C++ compiler
+# MCU 제품군 (예: stm32f3, stm32f4, stm32h7)
+MCU_FAMILY = stm32f4
 
-# CXXFLAGS_COMPILE: Flags specifically for compilation (.cpp to .o)
-# -std=c++23: Use C++23 standard
-# -Wall: Enable all standard warnings
-# -MMD: Generate dependency files (.d files) for each .o file.
-#       This is crucial for correct header dependency tracking.
-# $(INCDIR): Include directories (e.g., -I.)
-CXXFLAGS_COMPILE := -std=c++23 -Wall -mcpu=cortex-m4 -mthumb $(INCDIR)
+# MCU 시리즈 (예: stm32f3xx, stm32f4xx, stm32h7xx)
+MCU_SERIES = stm32f4xx
 
-# CXXFLAGS_LINK: Flags specifically for linking (.o to executable)
-# Usually just includes library paths or other linker-specific flags.
-CXXFLAGS_LINK := $(INCDIR) # Keep include paths for consistency if needed, but not strictly for linking itself
+# 특정 MCU 디바이스 (예: STM32F407VG, STM32F303xC, STM32H743xx)
+# 이 값은 CMSIS/HAL 헤더 파일에서 특정 디바이스를 활성화하는 데 사용됩니다.
+MCU_DEVICE = STM32F407xx
 
-# LDFLAGS: Default linker flags (e.g., for specific libraries like -lpqxx)
-LDFLAGS :=
+# CPU 아키텍처 및 코어 (예: cortex-m3, cortex-m4, cortex-m7)
+# FPU 유무에 따라 armv7-m (M3), armv7e-m (M4/M7)
+CPU_ARCH = armv7e-m
+CPU_CORE = cortex-m4
 
-# INCDIR: Include directories
-INCDIR := -I. # Current directory as include path
+# FPU 타입 (하드웨어 FPU 사용 시)
+# none: FPU 없음 (Cortex-M3)
+# fpv4-sp-d16: Cortex-M4 (단정밀도)
+# fpv5-d16: Cortex-M7 (단/배정밀도)
+FPU_TYPE = fpu=fpv4-sp-d16
 
-# LIBDIR: Library directories (currently empty, add -L/path/to/lib if needed)
-LIBDIR :=
+# 링커 스크립트 파일 (MCU에 맞는 .ld 파일 경로)
+# 이 경로는 프로젝트 구조에 따라 다를 수 있습니다.
+LD_SCRIPT = ./STM32F407VGTx_FLASH.ld
 
-# --- Extra Flags for Command Line Overrides ---
-EXTRA_CXXFLAGS_COMPILE ?=
-EXTRA_CXXFLAGS_LINK ?=
-EXTRA_LDFLAGS ?=
+# ===============================================================================
+# --- 2. 툴체인 설정 ---
+# ARM GCC 툴체인 경로 (환경 변수에 설정되어 있다면 비워두세요)
+TOOLCHAIN_PATH = 
+CC = $(TOOLCHAIN_PATH)arm-none-eabi-gcc
+AS = $(TOOLCHAIN_PATH)arm-none-eabi-gcc -x assembler-with-cpp
+LD = $(TOOLCHAIN_PATH)arm-none-eabi-gcc
+AR = $(TOOLCHAIN_PATH)arm-none-eabi-ar
+OBJCOPY = $(TOOLCHAIN_PATH)arm-none-eabi-objcopy
+OBJDUMP = $(TOOLCHAIN_PATH)arm-none-eabi-objdump
+SIZE = $(TOOLCHAIN_PATH)arm-none-eabi-size
 
-# --- Final Flags used in Compilation/Linking ---
-FINAL_CXXFLAGS_COMPILE := $(CXXFLAGS_COMPILE) $(EXTRA_CXXFLAGS_COMPILE)
-FINAL_CXXFLAGS_LINK := $(CXXFLAGS_LINK) $(EXTRA_CXXFLAGS_LINK)
-FINAL_LDFLAGS := $(LDFLAGS) $(EXTRA_LDFLAGS)
+# ===============================================================================
+# --- 3. 빌드 디렉토리 설정 ---
+BUILD_DIR = build
+OBJ_DIR = $(BUILD_DIR)/obj
 
-# --- General Rules ---
-.PHONY: all clean
+# ===============================================================================
+# --- 4. 소스 파일 설정 ---
+# C 소스 파일 (main.c, stm32f4xx_it.c, system_stm32f4xx.c 등)
+# 실제 STM32CubeMX 프로젝트에서 생성된 파일들을 포함해야 합니다.
+C_SOURCES = \
+    main.c \
+    stm32f4xx_it.c \
+    system_$(MCU_SERIES).c
 
-# Include automatically generated dependency files.
-# These files will list header dependencies for each .o file.
--include $(OBJS:.o=.d)
+# 어셈블리 소스 파일 (startup_$(MCU_SERIES).s, PendSV_Handler.s)
+ASM_SOURCES = \
+    startup_$(MCU_SERIES).s \
+    PendSV_Handler.s
 
-# Rule to compile .cpp files into .o files
-# Use the compilation-specific flags here
-%.o: %.cpp
-	$(CXX) $(FINAL_CXXFLAGS_COMPILE) -c $< -o $@
+# 모든 소스 파일 목록
+SOURCES = $(C_SOURCES) $(ASM_SOURCES)
 
-# Rule for the main executable
-# Use the linking-specific flags here
-$(TARGET): $(OBJS)
-	$(CXX) $(FINAL_CXXFLAGS_LINK) $(FINAL_LDFLAGS) $(OBJS) -o $(TARGET)
+# 오브젝트 파일 목록
+OBJECTS = $(patsubst %.c,$(OBJ_DIR)/%.o,$(C_SOURCES)) \
+          $(patsubst %.s,$(OBJ_DIR)/%.o,$(ASM_SOURCES))
 
-# --- Specific Build Targets ---
+# 실행 파일 이름
+TARGET = $(BUILD_DIR)/$(MCU_DEVICE).elf
 
-# Default target: builds the main executable
+# ===============================================================================
+# --- 5. 인클루드 경로 설정 ---
+# CMSIS 및 HAL/LL 라이브러리 경로를 프로젝트 구조에 맞게 수정하세요.
+# 일반적으로 CMSIS 코어, 디바이스 헤더, HAL 드라이버 헤더가 필요합니다.
+INC_DIRS = \
+    -I. \
+    -I./CMSIS/Core/Include \
+    -I./CMSIS/Device/ST/$(MCU_SERIES)/Include \
+    -I./Drivers/STM32$(MCU_FAMILY_UPPER)xx_HAL_Driver/Inc
+
+# FPU 지원 여부에 따른 정의 (Cortex-M4/M7/H7에서 __FPU_PRESENT=1)
+ifeq ($(FPU_TYPE), none)
+    DEFINE_FPU_PRESENT = 
+else
+    DEFINE_FPU_PRESENT = -D__FPU_PRESENT=1
+endif
+
+# ===============================================================================
+# --- 6. 컴파일러 및 링커 플래그 설정 ---
+
+# C 컴파일러 플래그
+CFLAGS = \
+    -mcpu=$(CPU_CORE) \
+    -mthumb \
+    -m$(FPU_TYPE) \
+    -mfloat-abi=hard \
+    -DUSE_HAL_DRIVER \
+    -D$(MCU_DEVICE) \
+    $(DEFINE_FPU_PRESENT) \
+    -DARM_MATH_CM4 \
+    -D__VFP_FP__ \
+    -O1 \
+    -Wall \
+    -g \
+    -std=c11 \
+    $(INC_DIRS)
+
+# 어셈블러 플래그
+ASFLAGS = \
+    -mcpu=$(CPU_CORE) \
+    -mthumb \
+    -m$(FPU_TYPE) \
+    -mfloat-abi=hard \
+    -D$(MCU_DEVICE) \
+    $(DEFINE_FPU_PRESENT) \
+    -DARM_MATH_CM4 \
+    -D__VFP_FP__ \
+    -g \
+    $(INC_DIRS)
+
+# 링커 플래그
+LDFLAGS = \
+    -mcpu=$(CPU_CORE) \
+    -mthumb \
+    -m$(FPU_TYPE) \
+    -mfloat-abi=hard \
+    -T$(LD_SCRIPT) \
+    -nostartfiles \
+    -Wl,-Map=$(BUILD_DIR)/$(MCU_DEVICE).map \
+    -Wl,--gc-sections \
+    -Wl,--print-memory-usage \
+    -Wl,--cref \
+    -g
+
+# ===============================================================================
+# --- 7. Makefile 규칙 ---
+
+.PHONY: all clean flash
+
 all: $(TARGET)
 
-# Clean up generated files
+$(TARGET): $(OBJECTS)
+	@echo "--- Linking $(TARGET) ---"
+	$(LD) $(OBJECTS) $(LDFLAGS) -o $@
+	@$(SIZE) $@
+
+$(OBJ_DIR)/%.o: %.c
+	@mkdir -p $(OBJ_DIR)
+	@echo "  CC $<"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/%.o: %.s
+	@mkdir -p $(OBJ_DIR)
+	@echo "  AS $<"
+	$(AS) $(ASFLAGS) -c $< -o $@
+
 clean:
-	@rm -f $(OBJS) $(TARGET) $(OBJS:.o=.d) 2>/dev/null
+	@echo "--- Cleaning build directory ---"
+	$(RM) -r $(BUILD_DIR)
+
+flash: $(TARGET)
+	@echo "--- Flashing $(TARGET) (Placeholder) ---"
+	# 여기에 ST-Link, OpenOCD, J-Link 등 플래싱 도구 명령어를 추가하세요.
+	# 예: openocd -f board/st_nucleo_f4.cfg -c "program $(TARGET) verify reset exit"
+	@echo "Flash command placeholder. Please add your actual flashing command here."
+
+# ===============================================================================
+# --- 8. 기타 유틸리티 ---
+
+# MCU_FAMILY_UPPER는 HAL 드라이버 경로에 사용됩니다 (예: STM32F4xx)
+MCU_FAMILY_UPPER = $(shell echo $(MCU_FAMILY) | tr '[:lower:]' '[:upper:]')
+
+# arm-none-eabi-objdump -D -j .text p4.o > p4.ss
+
+#arm-none-eabi-gcc -x assembler-with-cpp -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -DSTM32F407xx -D__FPU_PRESENT=1 -DARM_MATH_CM4 -D__VFP_FP__ -g -I. -I./CMSIS/Core/Include -I./CMSIS/Device/ST/stm32f4xx/Include -I./Drivers/STM32STM32F4xx_HAL_Driver/Inc -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -T./STM32F407VGTx_FLASH.ld -nostartfiles -Wl,-Map=build/STM32F407xx.map -Wl,--gc-sections -Wl,--print-memory-usage -Wl,--cref -g  -c p4.s
 

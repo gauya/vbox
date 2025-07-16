@@ -1,0 +1,36 @@
+
+p4.o:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <PendSV_Handler>:
+   0:	f3ef 8009 	mrs	r0, PSP
+   4:	e920 0ff0 	stmdb	r0!, {r4, r5, r6, r7, r8, r9, sl, fp}
+   8:	f01e 0f10 	tst.w	lr, #16
+   c:	bf08      	it	eq
+   e:	ed20 8a10 	vstmdbeq	r0!, {s16-s31}
+  12:	490f      	ldr	r1, [pc, #60]	@ (50 <start_first_task+0x1e>)
+  14:	6809      	ldr	r1, [r1, #0]
+  16:	6188      	str	r0, [r1, #24]
+  18:	490e      	ldr	r1, [pc, #56]	@ (54 <start_first_task+0x22>)
+  1a:	6809      	ldr	r1, [r1, #0]
+  1c:	6988      	ldr	r0, [r1, #24]
+  1e:	e8b0 0ff0 	ldmia.w	r0!, {r4, r5, r6, r7, r8, r9, sl, fp}
+  22:	f01e 0f10 	tst.w	lr, #16
+  26:	bf08      	it	eq
+  28:	ecb0 8a10 	vldmiaeq	r0!, {s16-s31}
+  2c:	f380 8809 	msr	PSP, r0
+  30:	4770      	bx	lr
+
+00000032 <start_first_task>:
+  32:	4807      	ldr	r0, [pc, #28]	@ (50 <start_first_task+0x1e>)
+  34:	6800      	ldr	r0, [r0, #0]
+  36:	6980      	ldr	r0, [r0, #24]
+  38:	f380 8809 	msr	PSP, r0
+  3c:	f04f 0303 	mov.w	r3, #3
+  40:	f043 0304 	orr.w	r3, r3, #4
+  44:	f383 8814 	msr	CONTROL, r3
+  48:	f3bf 8f6f 	isb	sy
+  4c:	4770      	bx	lr
+	...

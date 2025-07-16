@@ -1,0 +1,140 @@
+
+p4.o:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <PendSV_Handler>:
+   0:	f3ef 8009 	mrs	r0, PSP
+   4:	e920 0ff0 	stmdb	r0!, {r4, r5, r6, r7, r8, r9, sl, fp}
+   8:	f01e 0f10 	tst.w	lr, #16
+   c:	bf08      	it	eq
+   e:	ed20 8a10 	vstmdbeq	r0!, {s16-s31}
+  12:	490f      	ldr	r1, [pc, #60]	@ (50 <start_first_task+0x1e>)
+  14:	6809      	ldr	r1, [r1, #0]
+  16:	6188      	str	r0, [r1, #24]
+  18:	490e      	ldr	r1, [pc, #56]	@ (54 <start_first_task+0x22>)
+  1a:	6809      	ldr	r1, [r1, #0]
+  1c:	6988      	ldr	r0, [r1, #24]
+  1e:	e8b0 0ff0 	ldmia.w	r0!, {r4, r5, r6, r7, r8, r9, sl, fp}
+  22:	f01e 0f10 	tst.w	lr, #16
+  26:	bf08      	it	eq
+  28:	ecb0 8a10 	vldmiaeq	r0!, {s16-s31}
+  2c:	f380 8809 	msr	PSP, r0
+  30:	4770      	bx	lr
+
+00000032 <start_first_task>:
+  32:	4807      	ldr	r0, [pc, #28]	@ (50 <start_first_task+0x1e>)
+  34:	6800      	ldr	r0, [r0, #0]
+  36:	6980      	ldr	r0, [r0, #24]
+  38:	f380 8809 	msr	PSP, r0
+  3c:	f04f 0303 	mov.w	r3, #3
+  40:	f043 0304 	orr.w	r3, r3, #4
+  44:	f383 8814 	msr	CONTROL, r3
+  48:	f3bf 8f6f 	isb	sy
+  4c:	4770      	bx	lr
+	...
+
+Disassembly of section .debug_line:
+
+00000000 <.debug_line>:
+   0:	0000005e 	andeq	r0, r0, lr, asr r0
+   4:	00040005 	andeq	r0, r4, r5
+   8:	0000002a 	andeq	r0, r0, sl, lsr #32
+   c:	fb010102 	blx	4041e <start_first_task+0x403ec>
+  10:	01000d0e 	tsteq	r0, lr, lsl #26
+  14:	00010101 	andeq	r0, r1, r1, lsl #2
+  18:	00010000 	andeq	r0, r1, r0
+  1c:	01010100 	mrseq	r0, (UNDEF: 17)
+  20:	0000011f 	andeq	r0, r0, pc, lsl r1
+  24:	01020000 	mrseq	r0, (UNDEF: 2)
+  28:	020f021f 	andeq	r0, pc, #-268435455	@ 0xf0000001
+  2c:	00000018 	andeq	r0, r0, r8, lsl r0
+  30:	00001800 	andeq	r1, r0, r0, lsl #16
+  34:	05000000 	streq	r0, [r0, #-0]
+  38:	00000002 	andeq	r0, r0, r2
+  3c:	010e0300 	mrseq	r0, ELR_hyp
+  40:	212f312f 			@ <UNDEFINED> instruction: 0x212f312f
+  44:	22212131 	eorcs	r2, r1, #1073741836	@ 0x4000000c
+  48:	31222121 			@ <UNDEFINED> instruction: 0x31222121
+  4c:	3031212f 	eorscc	r2, r1, pc, lsr #2
+  50:	22222124 	eorcs	r2, r2, #36, 2
+  54:	2f303030 	svccs	0x00303030
+  58:	2e5c0330 	mrccs	3, 2, r0, cr12, cr0, {1}
+  5c:	00020232 	andeq	r0, r2, r2, lsr r2
+  60:	Address 0x60 is out of bounds.
+
+
+Disassembly of section .debug_line_str:
+
+00000000 <.debug_line_str>:
+   0:	6d6f682f 	stclvs	8, cr6, [pc, #-188]!	@ ffffff4c <start_first_task+0xffffff1a>
+   4:	61672f65 	cmnvs	r7, r5, ror #30
+   8:	72732f75 	rsbsvc	r2, r3, #468	@ 0x1d4
+   c:	74732f63 	ldrbtvc	r2, [r3], #-3939	@ 0xfffff09d
+  10:	2f32336d 	svccs	0x0032336d
+  14:	00706d74 	rsbseq	r6, r0, r4, ror sp
+  18:	732e3470 			@ <UNDEFINED> instruction: 0x732e3470
+	...
+
+Disassembly of section .debug_info:
+
+00000000 <.debug_info>:
+   0:	00000020 	andeq	r0, r0, r0, lsr #32
+   4:	04010005 	streq	r0, [r1], #-5
+   8:	00000000 	andeq	r0, r0, r0
+   c:	00000001 	andeq	r0, r0, r1
+  10:	00000000 	andeq	r0, r0, r0
+  14:	00005800 	andeq	r5, r0, r0, lsl #16
+  18:	00050000 	andeq	r0, r5, r0
+  1c:	001d0000 	andseq	r0, sp, r0
+  20:	80010000 	andhi	r0, r1, r0
+
+Disassembly of section .debug_abbrev:
+
+00000000 <.debug_abbrev>:
+   0:	10001101 	andne	r1, r0, r1, lsl #2
+   4:	12011117 	andne	r1, r1, #-1073741819	@ 0xc0000005
+   8:	1b0e030f 	blne	380c4c <start_first_task+0x380c1a>
+   c:	130e250e 	movwne	r2, #58638	@ 0xe50e
+  10:	00000005 	andeq	r0, r0, r5
+
+Disassembly of section .debug_aranges:
+
+00000000 <.debug_aranges>:
+   0:	0000001c 	andeq	r0, r0, ip, lsl r0
+   4:	00000002 	andeq	r0, r0, r2
+   8:	00040000 	andeq	r0, r4, r0
+	...
+  14:	00000058 	andeq	r0, r0, r8, asr r0
+	...
+
+Disassembly of section .debug_str:
+
+00000000 <.debug_str>:
+   0:	732e3470 			@ <UNDEFINED> instruction: 0x732e3470
+   4:	6f682f00 	svcvs	0x00682f00
+   8:	672f656d 	strvs	r6, [pc, -sp, ror #10]!
+   c:	732f7561 			@ <UNDEFINED> instruction: 0x732f7561
+  10:	732f6372 			@ <UNDEFINED> instruction: 0x732f6372
+  14:	32336d74 	eorscc	r6, r3, #116, 26	@ 0x1d00
+  18:	706d742f 	rsbvc	r7, sp, pc, lsr #8
+  1c:	554e4700 	strbpl	r4, [lr, #-1792]	@ 0xfffff900
+  20:	20534120 	subscs	r4, r3, r0, lsr #2
+  24:	32342e32 	eorscc	r2, r4, #800	@ 0x320
+	...
+
+Disassembly of section .ARM.attributes:
+
+00000000 <.ARM.attributes>:
+   0:	00002441 	andeq	r2, r0, r1, asr #8
+   4:	61656100 	cmnvs	r5, r0, lsl #2
+   8:	01006962 	tsteq	r0, r2, ror #18
+   c:	0000001a 	andeq	r0, r0, sl, lsl r0
+  10:	726f4305 	rsbvc	r4, pc, #335544320	@ 0x14000000
+  14:	2d786574 	cfldr64cs	mvdx6, [r8, #-464]!	@ 0xfffffe30
+  18:	0600344d 	streq	r3, [r0], -sp, asr #8
+  1c:	094d070d 	stmdbeq	sp, {r0, r2, r3, r8, r9, sl}^
+  20:	1b060a02 	blne	182830 <start_first_task+0x1827fe>
+  24:	Address 0x24 is out of bounds.
+

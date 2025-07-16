@@ -12,8 +12,8 @@
 
 
 uint32_t __stack_pool[ (MAX_TASK + 1) * DEF_STACK_SIZE] __attribute__((aligned(8)));
-uint8_t __current_task_id = 0;
-uint8_t __next_task_id = 0; // 현재 최대 task 수
+volatile uint8_t __current_task_id = 0;
+volatile uint8_t __next_task_id = 0; 
 
 TCB __tcb[MAX_TASK];
 
@@ -64,56 +64,6 @@ void set_stack_from_tcb(TCB *tcb) {
     }
 
     tcb->sp = (uint32_t)stack_top;
-}
-
-// deep seek
-void set_stack_from_tcb(TCB *tcb) {
-    uint32_t *stack_top = tcb->stack + tcb->stack_size;
-
-    /*--- 1. 스택 정렬 검증 (8바이트) ---*/
-    if ((uint32_t)stack_top % 8 != 0) {
-        stack_top--;  // 주소 강제 정렬
-    }
-
-    /*--- 2. 자동 복원 영역 (xPSR ~ R0) ---*/
-    *(--stack_top) = 0x01000000;              // xPSR (Thumb 모드)
-    *(--stack_top) = (uint32_t)tcb->func;     // PC (진입점)
-    *(--stack_top) = 0xFFFFFFFD;              // EXC_RETURN (Thread + PSP + FPU 비활성화)
-    *(--stack_top) = 0x12121212;              // R12
-    *(--stack_top) = 0x03030303;              // R3
-    *(--stack_top) = 0x02020202;              // R2
-    *(--stack_top) = 0x01010101;              // R1
-    *(--stack_top) = (uint32_t)tcb->context;  // R0 (인자 전달)
-
-#if defined(__FPU_PRESENT) && (__FPU_PRESENT == 1)
-    /*--- 3. FPU 컨텍스트 초기화 (M4/H7 분기) ---*/
-    *(--stack_top) = 0x00000000;              // FPSCR
-    *(--stack_top) = 0x00000000;              // Reserved (8바이트 정렬)
-
-    #if defined(__FPU_DP) && (__FPU_DP == 1)
-        /* H7 (Double-Precision): D0-D15 저장 (S0-S31 자동 포함) */
-        for (int i = 15; i >= 0; i--) {
-            *(--stack_top) = 0xBBBB0000 + i;  // Dn 상위 32비트
-            *(--stack_top) = 0xAAAA0000 + i;  // Dn 하위 32비트
-        }
-        tcb->ctrlstat |= 0x80;  // DP-FPU 사용 플래그
-    #else
-        /* M4 (Single-Precision): S0-S15 저장 */
-        for (int i = 15; i >= 0; i--) {
-            *(--stack_top) = 0xAAAA0000 + i;  // Sn
-        }
-    #endif
-
-    /* EXC_RETURN 업데이트: FPU 활성화 (비트 4 = 0) */
-    *(stack_top + 8) = 0xFFFFFFFD;  // xPSR 위치에서 8워드 뒤
-#endif
-
-    /*--- 4. 수동 저장 영역 (R4-R11) ---*/
-    for (int i = 0; i < 8; i++) {
-        *(--stack_top) = 0xDEADBEEF + i;  // R4-R11
-    }
-
-    tcb->sp = (uint32_t)stack_top;  // 최종 SP 저장
 }
 
 int add_task(void (*func)(), void *context, uint32_t stack_size,uint32_t period, int priority) {
@@ -193,23 +143,27 @@ void os_init() {
   }
   */
 
+  // SysTick, PendSV  인터럽트 우선순위 최하위로 설정
   SCB->SHPR3 |= (0xFFUL << 16); // PendSV 우선순위 설정
   SCB->SHPR3 |= (0xFFUL << 24); // SysTick 우선순위 설정
 
-  //SysTick_Config(SystemCoreClock / 1000); // 1ms (1000Hz) 시작은 하지말고 셋팅만해야됨
+  /*
   SysTick->LOAD = (SystemCoreClock / 1000) - 1; // 1ms (1000Hz) 주기 설정
   SysTick->VAL = 0; // 카운터 초기화
+  SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+  */
 }
 
 void os_start() {
-  // SyTick, PendSV 우선순위 최하위로 설정 oxF0
-  SCB->SHPR3 |= (0xFFUL << 16); // PendSV 
-  SCB->SHPR3 |= (0xFFUL << 24); // SysTick
-
   __current_task_id = 0;
 
   // SysTick 1ms Start scadule
-  SysTick_Config( SystemCoreClock / 1000 );
+  SysTick->LOAD = (SystemCoreClock / 1000) - 1; // 1ms (1000Hz) 주기 설정
+  SysTick->VAL = 0; // 카운터 초기화
+  
+
+  //SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+  // start_first_start() 의 끝부분에서 수행
 
   start_first_start(); // scadule_start()
 }
@@ -391,58 +345,10 @@ chosen:
 void delay(uint32_t ms) {
     delay_vars[__current_task_id] = ms;
     tasks[__current_task_id].ready = 0;
+
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
     __asm volatile("NOP");
 }
-
-// ========== Task Creation ==========
-void create_task(int id, void (*task_func)(void), uint16_t stack_size, uint8_t priority) {
-    tasks[id].stack_size = stack_size;
-    tasks[id].stack_mem = malloc(stack_size * sizeof(uint32_t));
-    uint32_t *sp = &tasks[id].stack_mem[stack_size];
-
-    *(--sp) = 0x21000000; // xPSR
-    *(--sp) = (uint32_t)task_func; // PC
-    *(--sp) = 0xFFFFFFFD; // LR (return to thread using PSP)
-    for (int i = 0; i < 5; i++) *(--sp) = 0; // R12, R3, R2, R1, R0
-    for (int i = 0; i < 8; i++) *(--sp) = 0xDEADBEEF; // R4-R11
-
-    tasks[id].sp = sp;
-    tasks[id].priority = priority;
-    tasks[id].ready = 1;
-    delay_vars[id] = 0;
-}
-
-// FPU 포함 태스크 생성
-void create_task_with_fpu(int id, void (*task_func)(void)) {
-    uint32_t *stack_top = &stacks[id][STACK_SIZE - 1];
-
-    // 자동 복원되는 영역 (xPSR~R0)
-    *(--stack_top) = 0x1000000;        // xPSR (Thumb & psp)
-    *(--stack_top) = (uint32_t)task_func; // PC
-    *(--stack_top) = 0xFFFFFFED;        // LR (EXC_RETURN, use PSP + FPU active)
-    *(--stack_top) = 0x12121212;        // R12
-    *(--stack_top) = 0x03030303;        // R3
-    *(--stack_top) = 0x02020202;        // R2
-    *(--stack_top) = 0x01010101;        // R1
-    *(--stack_top) = 0x00000000;        // R0
-
-    // FPU 자동 저장 프레임 (S0~S15 + FPSCR + reserved)
-    *(--stack_top) = 0x00000000;        // FPSCR
-    *(--stack_top) = 0x00000000;        // reserved word
-    *(--stack_top) = 0x00000000;        // reserved word
-    for (int i = 15; i >= 0; i--) {
-        *(--stack_top) = 0xAAAA0000 + i; // S15~S0
-    }
-
-    // 수동 저장 대상 (R4~R11)
-    for (int i = 0; i < 8; i++) {
-        *(--stack_top) = 0xDEADBEEF;
-    }
-
-    tasks[id].sp = stack_top;
-}
-
 
 // ========== Example Idle Task ==========
 void idle_task(void) {
@@ -516,30 +422,10 @@ void monitor_task() {
     }
 }
 
-__attribute__((naked)) void start_first_task() {
-__asm volatile (
-    "LDR R0, =__tcb\n"           // TCB 배열 주소
-    "LDR R1, =__current_task_id\n"
-    "LDRB R1, [R1]\n"            // current_task_id 로드
-    "MOV R2, #64\n"              // TCB 크기 (64바이트)
-    "MUL R1, R1, R2\n"           // 오프셋 계산
-    "ADD R0, R0, R1\n"           // 현재 TCB 주소
-    "LDR R0, [R0, #32]\n"        // TCB.sp (offset 32) 로드
-    "MSR PSP, R0\n"              // PSP 설정
-
-    "MOV R0, #0x03\n"            // CONTROL[1]=1 (PSP), [0]=1 (Thread Mode)
-    "MSR CONTROL, R0\n"          // 모드 전환
-    "ISB\n"                      // 파이프라인 동기화
-
-    "POP {R4-R11}\n"             // 수동 컨텍스트 복원
-    "POP {R0-R3, R12, LR, PC, xPSR}\n"  // 태스크 진입
-);
-}
-
 attribute((naked)) void start_first_task(void) {
 __asm volatile (
-    "LDR R0, =task_stack_ptrs\n"    // R0 = 배열 주소
-    "LDR R1, =__current_task_id\n"       // R1 = __current_task_id index 주소
+    "LDR R0, =__tcb\n"            // R0 = tasks 배열 주소
+    "LDR R1, =__current_task_id\n"  // R1 = __current_task_id index 주소
     "LDR R2, [R1]\n"                // R2 = 현재 태스크 ID
     "LSLS R2, R2, #2\n"             // 인덱싱을 위한 *4
     "ADD R0, R0, R2\n"
@@ -554,7 +440,7 @@ __asm volatile (
 );
 }
 
-__attribute__((naked)) void start_first_task(void) {
+__attribute__((naked)) void start_first_task_exam(void) {
 __asm volatile (
     "LDR R0, =__tcb\n"              // tasks 배열 주소 로드
     "LDR R1, =__current_task_id\n"  // __current_task_id 주소 로드
@@ -570,46 +456,52 @@ __asm volatile (
 );
 }
 
-os_start_first_task:
-    ; 이 함수는 최초로 태스크를 시작할 때 main 함수에서 호출됩니다.
-    ; 여기서 Main Stack Pointer(MSP)에서 Process Stack Pointer(PSP)로 전환하고,
-    ; 첫 태스크의 컨텍스트를 로드하여 실행을 시작합니다.
+__attribute__((naked)) void start_first_task(void) {
+    __asm volatile (
+        ; 1. 현재 실행할 첫 태스크의 TCB 포인터를 가져옵니다.
+        ; current_task_tcb는 TCB* 타입의 전역 변수입니다.
+        "LDR R0, =current_task_tcb\n" ; current_task_tcb 변수의 주소를 R0에 로드
+        "LDR R0, [R0]\n"              ; current_task_tcb (TCB* 타입) 값을 R0에 로드 (첫 태스크의 TCB 주소)
 
-    ; 1. 첫 태스크의 스택 포인터를 로드합니다.
-    LDR R0, =__current_task_sp  ; __current_task_sp 변수의 주소를 R0에 로드
-    LDR R0, [R0]              ; __current_task_sp 값을 R0에 로드 (이것이 첫 태스크의 스택 포인터)
+        ; 2. 첫 태스크의 PSP 값을 TCB에서 로드합니다.
+        ; TCB 구조체 내 psp 멤버의 오프셋은 24바이트입니다.
+        "LDR R0, [R0, #24]\n"         ; R0 = current_task_tcb->psp
 
-    ; 2. 첫 태스크의 R4-R11 레지스터를 복원합니다.
-    LDMIA R0!, {R4-R11}       ; 첫 태스크의 R4-R11을 스택에서 복원하고 R0를 업데이트(증가)합니다.
+        ; 3. PSP 레지스터를 첫 태스크의 스택 포인터로 설정합니다.
+        "MSR PSP, R0\n"
 
-    ; 3. 업데이트된 R0 (첫 태스크의 SP)를 PSP에 저장합니다.
-    MSR PSP, R0               ; Process Stack Pointer를 R0 (첫 태스크의 SP)로 설정
+        ; 4. CONTROL 레지스터를 설정하여 PSP를 사용하고 비특권 모드로 전환합니다.
+        ; FPU가 활성화된 경우 FPCA 비트도 설정합니다.
+        ; CONTROL 레지스터 비트:
+        ; Bit 0 (nPRIV): 0 = 특권 모드, 1 = 비특권 모드
+        ; Bit 1 (SPSEL): 0 = MSP 사용, 1 = PSP 사용
+        ; Bit 2 (FPCA): 0 = FPU 컨텍스트 비활성, 1 = FPU 컨텍스트 활성 (M4/M7/H7 FPU 전용)
+        "MOV R3, #0x03\n"             ; PSP 사용 (bit 1), 비특권 모드 (bit 0) = 0b011
+        "#if USE_FPU == 1\n"
+        "   ORR R3, R3, #0x04\n"      ; FPCA 비트 (bit 2) 추가 = 0b100. 결과: 0b111 (0x07)
+        "#endif\n"
+        "MSR CONTROL, R3\n"           ; CONTROL 레지스터에 설정 값 적용
+        "ISB\n"                       ; 명령어 동기화 장벽 (레지스터 변경 즉시 반영)
 
-    ; 4. CONTROL 레지스터를 설정하여 PSP를 사용하고 비특권 모드로 전환합니다.
-    ; CONTROL 레지스터 (ARMv7-M Architecture Reference Manual 참조):
-    ; Bit 1 (SPSEL): 0 = MSP 사용, 1 = PSP 사용
-    ; Bit 0 (nPRIV): 0 = 특권 모드, 1 = 비특권 모드 (RTOS에서는 보통 태스크를 비특권 모드로 실행)
-    MOV R0, #0x03             ; PSP 사용 (bit 1 설정), 비특권 모드 (bit 0 설정)
-    MSR CONTROL, R0           ; CONTROL 레지스터에 설정 값 적용
+        ; 5. 첫 태스크의 R4-R11 레지스터를 스택에서 복원합니다.
+        "POP {R4-R11}\n"              ; PSP에서 R4-R11을 팝하여 복원
 
-    ; 5. ISB (Instruction Synchronization Barrier) 및 DSB (Data Synchronization Barrier)
-    ; 캐시, 파이프라인 등의 동기화를 보장하여 레지스터 변경 사항이 즉시 적용되도록 합니다.
-    ISB
-    DSB
+        ; 6. SysTick 인터럽트 및 카운터를 활성화합니다.
+        ; SysTick->CTRL 레지스터:
+        ; Bit 0 (ENABLE): 1 = 카운터 활성화
+        ; Bit 1 (TICKINT): 1 = 인터럽트 활성화
+        ; Bit 2 (CLKSOURCE): 1 = 프로세서 클럭 사용 (Cortex-M에서 가장 일반적)
+        "LDR R0, =0xE000E010\n"       ; SysTick CTRL 레지스터 주소
+        "LDR R1, =0x07\n"             ; 0x07 = 0b111 (ENABLE | TICKINT | CLKSOURCE)
+        "STR R1, [R0]\n"              ; SysTick->CTRL = 0x07
 
-    ; 6. BX LR 명령을 통해 첫 태스크 함수로 점프합니다.
-    ; 이 과정은 PendSV_Handler에서 복귀하는 것과 유사하게 작동합니다.
-    ; 즉, 스택에 미리 저장된 R0-R3, R12, LR, PC, XPSR 값이 PSP에서 팝되면서
-    ; 첫 태스크가 마치 인터럽트에서 복귀하는 것처럼 실행을 시작합니다.
-    BX LR
-
-
-// Cortex-M4/M7 (FPU 지원) vs M3/M0 (미지원) 자동 감지
-#if defined(__FPU_PRESENT) && (__FPU_PRESENT == 1)
-    #define USE_FPU 1
-#else
-    #define USE_FPU 0
-#endif
+        ; 7. BX LR을 통해 첫 태스크 함수로 점프합니다.
+        ; os_initialize_task_stack에서 LR에 설정된 EXC_RETURN 값에 따라
+        ; 하드웨어적으로 PSP에서 나머지 레지스터 (R0-R3, R12, LR, PC, XPSR)를 팝하고
+        ; FPU가 활성화된 경우 FPU 레지스터도 자동으로 팝하여 태스크를 시작합니다.
+        "BX LR\n"
+    );
+}
 
 __attribute__((naked)) void start_first_task(void) {
     __asm volatile (
