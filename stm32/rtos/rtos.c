@@ -15,7 +15,7 @@ uint32_t __stack_pool[ (MAX_TASK + 1) * DEF_STACK_SIZE] __attribute__((aligned(8
 volatile uint8_t __current_task_id = 0;
 volatile uint8_t __next_task_id = 0; 
 
-TCB __tcb[MAX_TASK];
+static volatile TCB __tcb[MAX_TASK];
 
 // FPU 포함 태스크 생성
 void set_stack_from_tcb(TCB *tcb) {
@@ -147,9 +147,9 @@ void os_init() {
   SCB->SHPR3 |= (0xFFUL << 16); // PendSV 우선순위 설정
   SCB->SHPR3 |= (0xFFUL << 24); // SysTick 우선순위 설정
 
-  /*
   SysTick->LOAD = (SystemCoreClock / 1000) - 1; // 1ms (1000Hz) 주기 설정
   SysTick->VAL = 0; // 카운터 초기화
+  /*
   SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
   */
 }
@@ -208,6 +208,7 @@ void SysTick_Handler(void) {
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
 }
 
+#if 0
 void pre_task(uint8_t task_id) {
     task_ctrl[task_id].last_run_tick = get_tick();
 }
@@ -231,6 +232,7 @@ void task_wrapper(void (*func)(), uint8_t task_id) {
         post_task(task_id);
     }
 }
+#endif
 
 void schedule_next_task(void) {
     uint8_t best = __current_task_id;
@@ -460,7 +462,8 @@ __attribute__((naked)) void start_first_task(void) {
     __asm volatile (
         ; 1. 현재 실행할 첫 태스크의 TCB 포인터를 가져옵니다.
         ; current_task_tcb는 TCB* 타입의 전역 변수입니다.
-        "LDR R0, =current_task_tcb\n" ; current_task_tcb 변수의 주소를 R0에 로드
+        ;"LDR R0, =current_task_tcb\n" ; current_task_tcb 변수의 주소를 R0에 로드
+        "LDR R0, =__tcb\n" ; __tcb 변수의 주소를 R0에 로드
         "LDR R0, [R0]\n"              ; current_task_tcb (TCB* 타입) 값을 R0에 로드 (첫 태스크의 TCB 주소)
 
         ; 2. 첫 태스크의 PSP 값을 TCB에서 로드합니다.
