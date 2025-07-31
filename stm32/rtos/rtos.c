@@ -237,19 +237,6 @@ void schedule_next_task(void) {
     __current_task_id = best;
 }
 
-// ========== SysTick for Delay Countdown ==========
-void SysTick_Handler(void) {
-    for (int i = 0; i < MAX_TASK; i++) {
-        if (delay_vars[i] > 0) {
-            delay_vars[i]--;
-            if (delay_vars[i] == 0) {
-                tasks[i].ready = 1;
-            }
-        }
-    }
-    SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
-}
-
 void scheduler_start() {
     __current_task_id = 0;
     __set_PSP(__tcb[__current_task_id].stack);
@@ -268,19 +255,6 @@ void task_wake(uint8_t task_id) {
     if (task_id < task_count && task_ctrl[task_id].type == TASK_EVENT_DRIVEN) {
         task_ctrl[task_id].active = 1;
     }
-}
-
-void critical_section() {
-    interrupt_status = __get_PRIMASK();  // 현재 인터럽트 상태 저장 (PRIMASK 레지스터 읽기)
-    __disable_irq();                 // 인터럽트 비활성화
-
-    // ... (보호 구역 내 코드) ...
-
-    if (!(interrupt_status & 0x01)) { // 인터럽트가 비활성화되지 않았다면
-    //    __enable_irq();                 // 원래의 상태로 복원
-      __set_PRIMASK(interrupt_status);
-    }
-
 }
 
 // 우선순위 재조정-> 다음 실행할 task 결정
@@ -536,21 +510,6 @@ __attribute__((naked)) void start_first_task(void) {
     );
 }
 
-__attribute__((naked)) void go_to_monitor() {
-    __asm volatile (
-        "MRS R0, PSP\n"
-        "STMDB R0!, {R4-R11}\n"
-        "STR R0, %[psp]\n"
-        "MOV R0, #0\n"
-        "MSR CONTROL, R0\n"
-        "ISB\n"
-        "BL monitor_task\n"
-        : [psp] "=m" (task_psp[__current_task_id])
-        :
-        : "r0"
-    );
-}
-
 __attribute__((naked)) void PendSV_Handler(void) {
     __asm volatile (
         // Save context of current task
@@ -598,40 +557,3 @@ __attribute__((naked)) void PendSV_Handler(void) {
         "BX LR\n"
     );
 }
-
-#if 0
-__set_PSP(task_psp[__current_task_id]);
-__set_CONTROL(0x03);
-__ISB()
-
-/ C/C++ 코드에 해당하는 어셈블리 코드 (PendSV_Handler 내부)
-
-// 1. __set_PSP(task_psp[__current_task_id]);  // PSP 설정
-
-// task_psp[__current_task_id] 주소를, R0 레지스터에 로드 (C/C++ 컴파일러에 따라 다름)
-// (task_psp 배열, __current_task_id 변수 등은, 외부에서 정의되었다고 가정)
-LDR R0, =task_psp  // task_psp 배열의 주소 로드
-LDR R1, =__current_task_id // __current_task_id 변수의 주소 로드
-LDR R2, [R1]       // __current_task_id 값 로드 (현재 태스크의 ID)
-LSLS R2, R2, #2     // R2 = __current_task_id * 4 (uint32_t 배열)
-ADD R0, R0, R2      // R0 = task_psp[__current_task_id]의 주소
-LDR R0, [R0]       // R0 = task_psp[__current_task_id]의 값 (PSP 값)
-
-// PSP 레지스터에, R0 값 저장
-MSR PSP, R0        // PSP = R0  (PSP 설정)
-
-// 2. __set_CONTROL(0x03);  // CONTROL 레지스터 설정 (PSP, User mode)
-
-// 0x03 값을, R0 레지스터에 로드
-MOV R0, #0x03
-
-// CONTROL 레지스터에, R0 값 저장
-MSR CONTROL, R0    // CONTROL = R0  (CONTROL 레지스터 설정)
-
-// 3. __ISB();  // Instruction Synchronization Barrier (ISB)
-
-// ISB 명령어 실행 (ARM 아키텍처)
-ISB  // Instruction Synchronization Barrier
-
-#endif
-

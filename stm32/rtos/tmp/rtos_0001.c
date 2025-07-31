@@ -146,12 +146,6 @@ void os_init() {
   // SysTick, PendSV  인터럽트 우선순위 최하위로 설정
   SCB->SHPR3 |= (0xFFUL << 16); // PendSV 우선순위 설정
   SCB->SHPR3 |= (0xFFUL << 24); // SysTick 우선순위 설정
-
-  SysTick->LOAD = (SystemCoreClock / 1000) - 1; // 1ms (1000Hz) 주기 설정
-  SysTick->VAL = 0; // 카운터 초기화
-  /*
-  SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
-  */
 }
 
 void os_start() {
@@ -161,7 +155,6 @@ void os_start() {
   SysTick->LOAD = (SystemCoreClock / 1000) - 1; // 1ms (1000Hz) 주기 설정
   SysTick->VAL = 0; // 카운터 초기화
   
-
   //SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
   // start_first_start() 의 끝부분에서 수행
 
