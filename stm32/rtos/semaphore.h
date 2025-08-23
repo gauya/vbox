@@ -22,7 +22,7 @@
     uint32_t __primask_saved = __get_PRIMASK(); \
     if (!(__primask_saved & 0x01)) {       \
         __disable_irq();                     \
-    }                             \
+    }                             
 
 #define CRITICAL_SECTION_END()    \
     if (!(__primask_saved & 0x01)) {     \
